@@ -14,19 +14,23 @@ datasource db {
 }
 
 model User {
-  id       Int    @id @default(autoincrement())
-  name String
+  id    Int @id @default(autoincrement())
+  name String?
   email String @unique
   username String @unique
-  changes String
-  repo_name String
-  branch_name String
-  access_token String
-  github_username String
-  github_id Int
-  github_avatar String
-  github_url String
-  github_email String
-  github_bio String
+  access_token String?
+  google_access_token String?
+  github_avatar String?
+  google_avatar String?
 }
 
+
+model Commits {
+  id Int @id @default(autoincrement())
+  message String?
+  tree_sha Json[]
+  base_tree_sha Json[]
+  parent_sha String
+  status String? 
+  
+}

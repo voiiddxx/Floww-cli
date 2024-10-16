@@ -7,10 +7,16 @@ import chalk from 'chalk';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { PrismaClient } from '@prisma/client';
 
 const git = simpleGit();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+
+
+const prisma = new PrismaClient();
+// main func to store commit in database
 
 async function syncChanges(repo, branch, username) {
     try {
@@ -21,9 +27,22 @@ async function syncChanges(repo, branch, username) {
             return;
         }
 
-      
+        let existingUser = await prisma.user.findFirst({
+            where:{username : username}
+        });
 
-        await uploadChangesToGithub(repo, branch, token, status);
+        if(!existingUser){
+             console.log(chalk.red('User Not Authenticated on Syncc , Create your account first : https://synncc.blush.vercel.app'));
+             return;
+        }
+
+        const response = await uploadChangesToGithub(repo, branch, token, status , username);
+
+        if(!response){
+            console.log(chalk.red('Some issue occured , Please try again!'));
+            return;
+        }
+        console.log(chalk.green('Changes merged with synncc , You can schedule your commit through platform!'));
         
     } catch (error) {
         console.log(chalk.red("Some error occurred: ", error));
@@ -31,14 +50,20 @@ async function syncChanges(repo, branch, username) {
     }
 }
 
-async function uploadChangesToGithub(repo, branch, accessToken, status) {
-    const newCommitSha = await createTree(repo, branch, accessToken, status);
-    await updateBranchReference(repo, branch, newCommitSha, accessToken);
+
+
+
+
+async function uploadChangesToGithub(repo, branch, accessToken, status , username) {
+
+    const newCommitSha = await createTree(repo, branch, accessToken, status , username);
+    
+    // await updateBranchReference(repo, branch, newCommitSha, accessToken , username);
 }
 
-async function updateBranchReference(repo, branch, newCommitSha, accessToken) {
+async function updateBranchReference(repo, branch, newCommitSha, accessToken , username) {
     try {
-        await axios.patch(`https://api.github.com/repos/voiiddxx/${repo}/git/refs/heads/${branch}`, {
+        await axios.patch(`https://api.github.com/repos/${username}/${repo}/git/refs/heads/${branch}`, {
             sha: newCommitSha,
             force: false,
         }, {
@@ -53,20 +78,22 @@ async function updateBranchReference(repo, branch, newCommitSha, accessToken) {
     }
 }
 
-async function createTree(repo, branch, accessToken, status) {
+async function createTree(repo, branch, accessToken, status , username) {
+
     try {
-        const commitSha = await getLatestCommitSha(accessToken);
-        const commitResponse = await axios.get(`https://api.github.com/repos/voiiddxx/FacebookScrapper/git/commits/${commitSha}`, {
+
+        const commitSha = await getLatestCommitSha(accessToken , repo , username);
+        const commitResponse = await axios.get(`https://api.github.com/repos/${username}/${repo}/git/commits/${commitSha}`, {
             headers: {
                 Authorization: `token ${accessToken}`,
             },
         });
 
-        // Get the current tree SHA
+        
         const currentTreeSha = commitResponse.data.tree.sha;
 
-        // Fetch the existing files in the current tree
-        const existingTreeResponse = await axios.get(`https://api.github.com/repos/voiiddxx/FacebookScrapper/git/trees/${currentTreeSha}`, {
+        
+        const existingTreeResponse = await axios.get(`https://api.github.com/repos/${username}/${repo}/git/trees/${currentTreeSha}`, {
             headers: {
                 Authorization: `token ${accessToken}`,
             },
@@ -74,19 +101,19 @@ async function createTree(repo, branch, accessToken, status) {
 
         const existingFiles = existingTreeResponse.data.tree;
 
-        // Create a new tree with existing files and modified files
+        
         const newTreeWithData = existingFiles.map(file => ({
             path: file.path,
             mode: file.mode,
-            sha: file.sha, // Keep the existing SHA for unchanged files
+            sha: file.sha, 
         }));
 
-        // Add modified files
+        
         for (const file of status.files) {
             const filePath = file.path;
             const fileContent = fs.readFileSync(filePath, 'utf-8');
 
-            const blobRes = await axios.post(`https://api.github.com/repos/voiiddxx/FacebookScrapper/git/blobs`, {
+            const blobRes = await axios.post(`https://api.github.com/repos/${username}/${repo}/git/blobs`, {
                 content: fileContent,
                 encoding: 'utf8',
             }, {
@@ -99,14 +126,14 @@ async function createTree(repo, branch, accessToken, status) {
             newTreeWithData.push({
                 path: filePath,
                 mode: '100644',
-                sha: blobRes.data.sha, // Use the new blob SHA for modified files
+                sha: blobRes.data.sha, 
             });
         }
 
-        // Create a new tree
-        const treeRes = await axios.post('https://api.github.com/repos/voiiddxx/FacebookScrapper/git/trees', {
+        
+        const treeRes = await axios.post(`https://api.github.com/repos/${username}/${repo}/git/trees`, {
             tree: newTreeWithData,
-            base_tree: currentTreeSha // Ensure the tree is based on the current one
+            base_tree: currentTreeSha 
         }, {
             headers: {
                 Authorization: `token ${accessToken}`,
@@ -114,8 +141,8 @@ async function createTree(repo, branch, accessToken, status) {
             }
         });
 
-        // Create a new commit
-        const commitRes = await axios.post(`https://api.github.com/repos/voiiddxx/FacebookScrapper/git/commits`, {
+
+        const commitRes = await axios.post(`https://api.github.com/repos/${username}/${repo}/git/commits`, {
             message: "Sync changes from CLI tool",
             tree: treeRes.data.sha,
             parents: [commitSha], // Use the latest commit as a parent
@@ -126,6 +153,8 @@ async function createTree(repo, branch, accessToken, status) {
             }
         });
 
+        
+
         console.log(`Created commit: ${commitRes.data.sha}`);
         return commitRes.data.sha;
 
@@ -135,9 +164,9 @@ async function createTree(repo, branch, accessToken, status) {
 }
 
 
-async function getLatestCommitSha(accessToken) {
+async function getLatestCommitSha(accessToken , repo , username) {
     try {
-        const response = await axios.get(`https://api.github.com/repos/voiiddxx/FacebookScrapper/git/refs/heads/main`, {
+        const response = await axios.get(`https://api.github.com/repos/${username}/${repo}/git/refs/heads/main`, {
             headers: {
                 Authorization: `token ${accessToken}`,
             },
