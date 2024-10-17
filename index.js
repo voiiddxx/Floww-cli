@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url';
 import { PrismaClient } from '@prisma/client';
 
 const git = simpleGit();
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -27,22 +28,30 @@ async function syncChanges(repo, branch, username) {
             return;
         }
 
-        let existingUser = await prisma.user.findFirst({
-            where:{username : username}
-        });
 
-        if(!existingUser){
-             console.log(chalk.red('User Not Authenticated on Syncc , Create your account first : https://synncc.blush.vercel.app'));
-             return;
+        // const response = await uploadChangesToGithub(repo, branch, token, status , username);
+        
+        const commitData = {
+            repo,
+            branch,
+            username,
+            files: status.files.map(file => ({
+                path: file.path,
+                content: fs.readFileSync(file.path, 'utf-8'),
+            })),    
         }
 
-        const response = await uploadChangesToGithub(repo, branch, token, status , username);
 
-        if(!response){
-            console.log(chalk.red('Some issue occured , Please try again!'));
+        const res = await axios.post('http://localhost:3000/api/commit/request' , commitData);
+        
+
+        if(res.status === 200){
+            console.log('Commit Saved on Floww');
             return;
         }
-        console.log(chalk.green('Changes merged with synncc , You can schedule your commit through platform!'));
+
+        console.log(chalk.red("Failed to save commit: "));
+        return;
         
     } catch (error) {
         console.log(chalk.red("Some error occurred: ", error));
@@ -78,11 +87,15 @@ async function updateBranchReference(repo, branch, newCommitSha, accessToken , u
     }
 }
 
+
 async function createTree(repo, branch, accessToken, status , username) {
 
     try {
 
         const commitSha = await getLatestCommitSha(accessToken , repo , username);
+
+
+
         const commitResponse = await axios.get(`https://api.github.com/repos/${username}/${repo}/git/commits/${commitSha}`, {
             headers: {
                 Authorization: `token ${accessToken}`,
@@ -152,8 +165,6 @@ async function createTree(repo, branch, accessToken, status , username) {
                 'Content-Type': 'application/json',
             }
         });
-
-        
 
         console.log(`Created commit: ${commitRes.data.sha}`);
         return commitRes.data.sha;
