@@ -38,15 +38,15 @@ async function syncChanges(repo, branch, username) {
             files: status.files.map(file => ({
                 path: file.path,
                 content: fs.readFileSync(file.path, 'utf-8'),
-            })),    
+            })),  
+            status:'Requested'  
         }
 
 
-        const res = await axios.post('http://localhost:3000/api/commit/request' , commitData);
-        
+        const res = await axios.post('https://floww-one.vercel.app/api/commit/request' , commitData);
 
         if(res.status === 200){
-            console.log('Commit Saved on Floww');
+            console.log(chalk.green("Changes synced successfully."));
             return;
         }
 
@@ -88,7 +88,7 @@ async function updateBranchReference(repo, branch, newCommitSha, accessToken , u
 }
 
 
-async function createTree(repo, branch, accessToken, status , username) {
+async function  createTree(repo, branch, accessToken, status , username) {
 
     try {
 
