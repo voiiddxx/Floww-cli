@@ -19,21 +19,40 @@ const __dirname = path.dirname(__filename);
 const prisma = new PrismaClient();
 // main func to store commit in database
 
-async function syncChanges(repo, branch, username) {
+async function syncChanges( username) {
     try {
+
+
+        const gitBranch = git.branch();
+        const currentBranch = (await gitBranch).current
+        let repo_name = '';
+        const remotes = await git.getRemotes(true);
+        
+        const originRemote = remotes.find(remote => remote.name === 'origin');
+
+        if (originRemote) {
+            const repoUrl = originRemote.refs.fetch;
+            repo_name = repoUrl.split('/').pop().replace('.git', '');
+        } 
+        
         const status = await git.status();
 
         if (status.staged.length === 0) {
             console.log(chalk.yellow("No changes to sync."));
             return;
+        }   
+        console.log(currentBranch , repo_name);
+
+        if(!currentBranch || repo_name === ''){
+            console.log(chalk.red('Some error occured'));   
+            return;
         }
 
-
-        // const response = await uploadChangesToGithub(repo, branch, token, status , username);
         
+
         const commitData = {
-            repo,
-            branch,
+            repo:repo_name,
+            branch:currentBranch,
             username,
             files: status.files.map(file => ({
                 path: file.path,
@@ -41,7 +60,6 @@ async function syncChanges(repo, branch, username) {
             })),  
             status:'Requested'  
         }
-
 
         const res = await axios.post('https://floww-one.vercel.app/api/commit/request' , commitData);
 
@@ -190,11 +208,9 @@ async function getLatestCommitSha(accessToken , repo , username) {
 
 program.version('1.0.0')
     .description('Sync CLI tool for syncing your staged changes with GitHub')
-    .requiredOption('-r, --repo <repo>', 'Repository name')
-    .requiredOption('-b, --branch <branch>', 'Branch name')
     .requiredOption('-u, --username <username>', 'User Name')
     .action(async (option) => {
-        await syncChanges(option.repo, option.branch, option.username);
+        await syncChanges(option.username);
     });
 
 program.parse(process.argv);
