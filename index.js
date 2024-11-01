@@ -23,9 +23,18 @@ async function syncChanges( username) {
     try {
 
 
+        let modifiedFiles = [];
+        let deletedFiles = [];
+        let renamedFiles = [];
+        let additionFiles = [];
+        let modifiledDiffFile = []
+
         const gitBranch = git.branch();
+
         const currentBranch = (await gitBranch).current
+
         let repo_name = '';
+
         const remotes = await git.getRemotes(true);
         
         const originRemote = remotes.find(remote => remote.name === 'origin');
@@ -36,17 +45,38 @@ async function syncChanges( username) {
         } 
         
         const status = await git.status();
-
-        if (status.staged.length === 0) {
-            console.log(chalk.yellow("No changes to sync."));
-            return;
-        }   
-        console.log(currentBranch , repo_name);
+  
 
         if(!currentBranch || repo_name === ''){
             console.log(chalk.red('Some error occured'));   
             return;
         }
+
+
+        for (const filePath of status.modified) {
+            const diffFile = await git.diff([filePath]); 
+            console.log("Diff for", filePath, ":", diffFile);
+            modifiledDiffFile.push({path:filePath , content: diffFile});
+            const content =  fs.readFileSync(filePath , 'utf-8');
+            modifiedFiles.push({path: filePath, content: content});
+            if (!diffFile) {
+                console.log(`No diff found for ${filePath}. It may be staged or have no changes.`);
+            }
+        }
+
+        for (const filePath of status.deleted) {
+            deletedFiles.push(filePath);
+        }
+
+        for (const filePath of status.renamed) {
+            renamedFiles.push({from: filePath.from, to: filePath.to});
+        }
+
+
+        // for (const filePath of status.added) {
+        //     const content = fs.readFileSync(filePath , 'utf-8')
+        //     additionFiles.push({path:filePath , content:content});
+        // }
 
         
 
@@ -54,14 +84,19 @@ async function syncChanges( username) {
             repo:repo_name,
             branch:currentBranch,
             username,
-            files: status.files.map(file => ({
-                path: file.path,
-                content: fs.readFileSync(file.path, 'utf-8'),
-            })),  
+            createdFile:additionFiles,
+            deleteFile:deletedFiles,
+            modifiedFile:modifiedFiles,
+            diffFile:modifiledDiffFile,
             status:'Requested'  
         }
 
-        const res = await axios.post('https://floww-one.vercel.app/api/commit/request' , commitData);
+
+
+        console.log("Commit Data :" , commitData);
+        
+
+        const res = await axios.post('http://localhost:3000/api/commit/request' , commitData);
 
         if(res.status === 200){
             console.log(chalk.green("Changes synced successfully."));
