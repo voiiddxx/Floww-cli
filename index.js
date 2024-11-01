@@ -71,13 +71,6 @@ async function syncChanges( username) {
         for (const filePath of status.renamed) {
             renamedFiles.push({from: filePath.from, to: filePath.to});
         }
-
-
-        // for (const filePath of status.added) {
-        //     const content = fs.readFileSync(filePath , 'utf-8')
-        //     additionFiles.push({path:filePath , content:content});
-        // }
-
         
 
         const commitData = {
@@ -90,11 +83,6 @@ async function syncChanges( username) {
             diffFile:modifiledDiffFile,
             status:'Requested'  
         }
-
-
-
-        console.log("Commit Data :" , commitData);
-        
 
         const res = await axios.post('http://localhost:3000/api/commit/request' , commitData);
 
