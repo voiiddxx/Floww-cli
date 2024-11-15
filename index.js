@@ -55,7 +55,6 @@ async function syncChanges( username) {
 
         for (const filePath of status.modified) {
             const diffFile = await git.diff([filePath]); 
-            console.log("Diff for", filePath, ":", diffFile);
             modifiledDiffFile.push({path:filePath , content: diffFile});
             const content =  fs.readFileSync(filePath , 'utf-8');
             modifiedFiles.push({path: filePath, content: content});
@@ -65,13 +64,19 @@ async function syncChanges( username) {
         }
 
         for (const filePath of status.deleted) {
-            deletedFiles.push(filePath);
+            deletedFiles.push({path:filePath});
         }
 
         for (const filePath of status.renamed) {
             renamedFiles.push({from: filePath.from, to: filePath.to});
         }
-        
+
+        for(const filePath of status.not_added){
+            const content = fs.readFileSync(filePath, 'utf8');
+            additionFiles.push({path: filePath, content: content});
+        }
+
+
 
         const commitData = {
             repo:repo_name,
